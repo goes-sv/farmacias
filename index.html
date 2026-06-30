@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tablero de Farmacias · El Salvador</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="favicon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<style>
+  /* ============================================================
+     CONFIGURACIÓN DE FUENTE DE DATOS  (editar aquí si cambia la hoja)
+     ============================================================ */
+  :root{
+    /* Paleta UI — neutra, el color vivo se reserva para el mapa */
+    --bg:        #eef1f4;
+    --panel:     #ffffff;
+    --ink:       #0f172a;
+    --ink-soft:  #475569;
+    --ink-mute:  #94a3b8;
+    --line:      #e2e8f0;
+    --line-soft: #eef2f6;
+    --accent:    #0f766e;   /* teal institucional */
+    --accent-d:  #115e59;
+    --header:    #0b1f2a;   /* slate muy oscuro */
+    --header-2:  #12303d;
+    --active:    #16a34a;   /* estatus ACTIVO */
+    --inactive:  #94a3b8;   /* estatus INACTIVO */
+    --shadow:    0 1px 2px rgba(15,23,42,.06), 0 8px 24px rgba(15,23,42,.06);
+    --radius:    14px;
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+
+  /* ---------- App shell ---------- */
+  .app{display:flex; flex-direction:column; height:100vh}
+
+  header.topbar{
+    background:linear-gradient(180deg,var(--header),var(--header-2));
+    color:#e7eef2; padding:12px 20px;
+    display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+    border-bottom:1px solid #06141c;
+  }
+  .brand{display:flex; align-items:center; gap:12px; min-width:0}
+  .brand .mark{
+    width:38px;height:38px;border-radius:10px;flex:0 0 auto;
+    background:linear-gradient(135deg,var(--accent),#0e7490);
+    display:grid;place-items:center;color:#fff;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);
+  }
+  .brand .mark svg{width:21px;height:21px}
+  .brand h1{font-size:15px;font-weight:700;letter-spacing:.2px;margin:0;line-height:1.15}
+  .brand p{margin:2px 0 0;font-size:11.5px;color:#8aa3b0;font-weight:500;
+    text-transform:uppercase;letter-spacing:.9px}
+
+  .topbar-spacer{flex:1 1 auto}
+  .sync{display:flex;align-items:center;gap:10px;font-size:12px;color:#9fb6c2}
+  .sync .dot{width:8px;height:8px;border-radius:50%;background:#475569;flex:0 0 auto}
+  .sync.ok .dot{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.18)}
+  .sync.err .dot{background:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.18)}
+  .sync.load .dot{background:#eab308;animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.3}}
+  .btn-refresh{
+    appearance:none;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);
+    color:#e7eef2;font:inherit;font-size:12.5px;font-weight:600;
+    padding:8px 13px;border-radius:9px;cursor:pointer;display:flex;align-items:center;gap:7px;
+    transition:background .15s,border-color .15s;
+  }
+  .btn-refresh:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.28)}
+  .btn-refresh:active{transform:translateY(1px)}
+  .btn-refresh svg{width:15px;height:15px}
+  .btn-refresh.spin svg{animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- Body grid ---------- */
+  .body{flex:1 1 auto; display:flex; min-height:0}
+
+  /* ---------- Sidebar ---------- */
+  aside.sidebar{
+    width:380px;flex:0 0 380px;background:var(--panel);
+    border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;
+    position:relative;
+  }
+  .search{padding:14px 16px 12px;border-bottom:1px solid var(--line-soft)}
+  .search .field{position:relative}
+  .search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);
+    width:16px;height:16px;color:var(--ink-mute)}
+  .search input{
+    width:100%;padding:11px 12px 11px 36px;border:1px solid var(--line);
+    border-radius:10px;font:inherit;font-size:13.5px;color:var(--ink);background:#fff;
+  }
+  .search input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(15,118,110,.12)}
+  .list-meta{padding:10px 18px;font-size:11.5px;color:var(--ink-mute);font-weight:600;
+    letter-spacing:.5px;text-transform:uppercase;border-bottom:1px solid var(--line-soft);
+    display:flex;justify-content:space-between;align-items:center}
+
+  .list{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain}
+  .list-item{
+    display:flex;gap:12px;align-items:flex-start;padding:12px 16px;cursor:pointer;
+    border-bottom:1px solid var(--line-soft);transition:background .12s;
+  }
+  .list-item:hover{background:#f6f9fb}
+  .list-item.sel{background:#ecfdf7;box-shadow:inset 3px 0 0 var(--accent)}
+  .li-pin{width:11px;height:11px;border-radius:50%;margin-top:4px;flex:0 0 auto;
+    box-shadow:0 0 0 2px #fff, 0 0 0 3px rgba(15,23,42,.12)}
+  .li-body{min-width:0;flex:1}
+  .li-name{font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.25;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .li-sub{font-size:11.5px;color:var(--ink-soft);margin-top:3px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .li-tags{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+  .tag{font-size:10px;font-weight:700;letter-spacing:.3px;padding:2px 7px;border-radius:20px;
+    text-transform:uppercase}
+  .tag.prov{color:#fff}
+  .tag.st-activo{background:#dcfce7;color:#15803d}
+  .tag.st-inactivo{background:#f1f5f9;color:#64748b}
+  .empty{padding:40px 24px;text-align:center;color:var(--ink-mute);font-size:13px}
+  .empty svg{width:34px;height:34px;margin-bottom:10px;opacity:.5}
+
+  /* ---------- Ficha (detalle) ---------- */
+  .detail{
+    position:absolute;inset:0;background:var(--panel);display:flex;flex-direction:column;
+    transform:translateX(100%);transition:transform .26s cubic-bezier(.4,0,.2,1);z-index:5;
+  }
+  .detail.open{transform:translateX(0)}
+  .detail-head{padding:13px 16px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:10px}
+  .back{appearance:none;border:1px solid var(--line);background:#fff;border-radius:9px;
+    padding:7px 11px;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-soft);
+    cursor:pointer;display:flex;align-items:center;gap:6px}
+  .back:hover{background:#f6f9fb;color:var(--ink)}
+  .back svg{width:14px;height:14px}
+  .detail-body{flex:1 1 auto;overflow-y:auto;padding:18px}
+
+  .fh{margin-bottom:16px}
+  .fh .prov-line{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .fh .prov-line .pin{width:12px;height:12px;border-radius:50%}
+  .fh .prov-line span{font-size:11.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-soft)}
+  .fh h2{margin:0;font-size:19px;font-weight:800;line-height:1.2;color:var(--ink)}
+  .fh .code{margin-top:6px;font-size:12px;color:var(--ink-mute);font-weight:600;font-variant-numeric:tabular-nums}
+  .fh .status-row{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+  .pill{font-size:11px;font-weight:700;padding:5px 11px;border-radius:20px;letter-spacing:.3px}
+  .pill.activo{background:#dcfce7;color:#15803d}
+  .pill.inactivo{background:#f1f5f9;color:#64748b}
+  .pill.h24{background:#fef3c7;color:#b45309}
+
+  .services{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 18px}
+  .svc{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;
+    padding:6px 10px;border-radius:8px;border:1px solid var(--line)}
+  .svc.yes{background:#f0fdf4;border-color:#bbf7d0;color:#15803d}
+  .svc.no{background:#fff;color:var(--ink-mute)}
+  .svc svg{width:13px;height:13px}
+
+  .field-grid{display:grid;gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);
+    border-radius:12px;overflow:hidden}
+  .frow{background:#fff;padding:11px 14px}
+  .frow dt{font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--ink-mute);margin:0}
+  .frow dd{margin:4px 0 0;font-size:13.5px;color:var(--ink);line-height:1.4;word-break:break-word}
+  .frow dd a{color:var(--accent);text-decoration:none;font-weight:600}
+  .frow dd a:hover{text-decoration:underline}
+  .frow.muted dd{color:var(--ink-mute);font-style:italic}
+
+  .hours{margin-top:16px}
+  .hours h3{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
+    color:var(--ink-mute);margin:0 0 8px}
+  .hours table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .hours td{padding:8px 10px;border:1px solid var(--line-soft)}
+  .hours td:first-child{font-weight:600;color:var(--ink-soft);width:42%}
+  .hours td:last-child{color:var(--ink);font-variant-numeric:tabular-nums}
+
+  /* ---------- Main / map ---------- */
+  main.main{flex:1 1 auto;display:flex;flex-direction:column;min-width:0;min-height:0}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;
+    padding:16px 18px 4px}
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 16px;cursor:pointer;position:relative;overflow:hidden;
+    transition:border-color .15s,box-shadow .15s,transform .05s;box-shadow:var(--shadow);
+  }
+  .card:hover{border-color:#cbd5e1}
+  .card:active{transform:translateY(1px)}
+  .card .accent-bar{position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent)}
+  .card.c-activo .accent-bar{background:var(--active)}
+  .card.c-inactivo .accent-bar{background:var(--inactive)}
+  .card.sel{border-color:var(--accent);box-shadow:0 0 0 3px rgba(15,118,110,.14),var(--shadow)}
+  .card.c-activo.sel{border-color:var(--active);box-shadow:0 0 0 3px rgba(22,163,74,.16),var(--shadow)}
+  .card.c-inactivo.sel{border-color:#64748b;box-shadow:0 0 0 3px rgba(100,116,139,.16),var(--shadow)}
+  .card .lbl{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--ink-mute)}
+  .card .val{font-size:30px;font-weight:800;line-height:1;margin-top:8px;color:var(--ink);
+    font-variant-numeric:tabular-nums}
+  .card .pct{font-size:11.5px;color:var(--ink-soft);font-weight:600;margin-top:4px}
+  .card.is-filter::after{content:"filtrando";position:absolute;top:10px;right:12px;
+    font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+    color:var(--accent);opacity:0}
+  .card.sel.is-filter::after{opacity:1}
+
+  .toolbar{display:flex;align-items:center;gap:12px;padding:12px 18px;flex-wrap:wrap}
+  .ctrl{display:flex;flex-direction:column;gap:4px}
+  .ctrl label{font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--ink-mute)}
+  .ctrl select{
+    appearance:none;border:1px solid var(--line);background:#fff
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 11px center;
+    border-radius:9px;padding:9px 32px 9px 12px;font:inherit;font-size:13px;color:var(--ink);
+    min-width:180px;cursor:pointer;
+  }
+  .ctrl select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(15,118,110,.12)}
+  .toolbar .clear{margin-left:auto;align-self:flex-end}
+  .clear-btn{appearance:none;border:1px solid var(--line);background:#fff;border-radius:9px;
+    padding:9px 13px;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;
+    display:flex;align-items:center;gap:6px}
+  .clear-btn:hover{background:#f6f9fb;color:var(--ink)}
+  .clear-btn svg{width:13px;height:13px}
+
+  .map-wrap{flex:1 1 auto;margin:6px 18px 18px;border-radius:var(--radius);overflow:hidden;
+    border:1px solid var(--line);position:relative;min-height:0;box-shadow:var(--shadow)}
+  #map{position:absolute;inset:0}
+
+  /* leyenda */
+  .legend{position:absolute;left:14px;bottom:14px;z-index:500;background:rgba(255,255,255,.96);
+    border:1px solid var(--line);border-radius:12px;padding:11px 13px;box-shadow:var(--shadow);
+    max-width:230px;backdrop-filter:blur(4px)}
+  .legend h4{margin:0 0 8px;font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--ink-mute)}
+  .legend .row{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-soft);
+    padding:2px 0;cursor:pointer;font-weight:500}
+  .legend .row .sw{width:11px;height:11px;border-radius:50%;flex:0 0 auto}
+  .legend .row.off{opacity:.38}
+  .legend .row span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  .map-count{position:absolute;right:14px;top:14px;z-index:500;background:rgba(11,31,42,.92);
+    color:#dCe7ee;font-size:11.5px;font-weight:600;padding:7px 12px;border-radius:9px;
+    letter-spacing:.3px;backdrop-filter:blur(4px)}
+
+  /* popup */
+  .leaflet-popup-content{margin:12px 14px;font-family:'Inter',sans-serif}
+  .pop-name{font-size:13.5px;font-weight:700;color:var(--ink);margin-bottom:3px}
+  .pop-sub{font-size:11.5px;color:var(--ink-soft)}
+  .pop-link{display:inline-block;margin-top:8px;font-size:11.5px;font-weight:700;color:var(--accent);cursor:pointer}
+
+  /* overlay de error / carga */
+  .overlay{position:absolute;inset:0;z-index:900;display:flex;align-items:center;justify-content:center;
+    background:rgba(238,241,244,.85);backdrop-filter:blur(2px)}
+  .overlay .box{background:#fff;border:1px solid var(--line);border-radius:14px;padding:26px 30px;
+    max-width:420px;text-align:center;box-shadow:var(--shadow)}
+  .overlay .box svg{width:34px;height:34px;color:var(--ink-mute);margin-bottom:12px}
+  .overlay .box h3{margin:0 0 6px;font-size:15px;color:var(--ink)}
+  .overlay .box p{margin:0;font-size:13px;color:var(--ink-soft);line-height:1.5}
+  .overlay .box code{background:#f1f5f9;padding:1px 5px;border-radius:4px;font-size:12px}
+  .spinner{width:30px;height:30px;border:3px solid var(--line);border-top-color:var(--accent);
+    border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px}
+
+  /* ---------- Responsive ---------- */
+  @media (max-width:900px){
+    body{overflow:auto}
+    .app{height:auto;min-height:100vh}
+    .body{flex-direction:column}
+    aside.sidebar{width:auto;flex:none;max-height:48vh;border-right:none;border-bottom:1px solid var(--line)}
+    .map-wrap{min-height:60vh}
+    main.main{min-height:70vh}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.5 3 3 8.5v9A1.5 1.5 0 0 0 4.5 19h15a1.5 1.5 0 0 0 1.5-1.5v-9L13.5 3z"/>
+          <path d="M12 8v6M9 11h6"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Tablero de Farmacias</h1>
+        <p>Red de farmacias · El Salvador</p>
+      </div>
+    </div>
+
+    <div class="topbar-spacer"></div>
+
+    <div class="sync load" id="sync">
+      <span class="dot"></span>
+      <span id="syncText">Cargando datos…</span>
+    </div>
+    <button class="btn-refresh" id="refresh" title="Volver a leer la hoja">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5"/>
+      </svg>
+      Actualizar
+    </button>
+  </header>
+
+  <div class="body">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar">
+      <div class="search">
+        <div class="field">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <input id="search" type="search" placeholder="Buscar por nombre, código o municipio…" autocomplete="off">
+        </div>
+      </div>
+      <div class="list-meta">
+        <span id="listCount">—</span>
+        <span id="listHint"></span>
+      </div>
+      <div class="list" id="list"></div>
+
+      <!-- Ficha de detalle -->
+      <div class="detail" id="detail">
+        <div class="detail-head">
+          <button class="back" id="back">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            Volver al listado
+          </button>
+        </div>
+        <div class="detail-body" id="detailBody"></div>
+      </div>
+    </aside>
+
+    <!-- ============ MAIN ============ -->
+    <main class="main">
+      <div class="cards" id="cards"></div>
+
+      <div class="toolbar">
+        <div class="ctrl">
+          <label for="fDepto">Departamento</label>
+          <select id="fDepto"><option value="">Todos</option></select>
+        </div>
+        <div class="ctrl">
+          <label for="fProv">Proveedor</label>
+          <select id="fProv"><option value="">Todos</option></select>
+        </div>
+        <div class="clear">
+          <button class="clear-btn" id="clearFilters">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            Limpiar filtros
+          </button>
+        </div>
+      </div>
+
+      <div class="map-wrap">
+        <div id="map"></div>
+        <div class="map-count" id="mapCount">—</div>
+        <div class="legend" id="legend" style="display:none">
+          <h4>Proveedor</h4>
+          <div id="legendRows"></div>
+        </div>
+        <div class="overlay" id="overlay">
+          <div class="box">
+            <div class="spinner"></div>
+            <h3>Leyendo la hoja de cálculo…</h3>
+            <p>Conectando con Google Sheets.</p>
+          </div>
+        </div>
+      </div>
+    </main>
+
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   1) CONFIGURACIÓN  —  editar solo esto si cambia la hoja
+   ============================================================ */
+const SHEET_ID = "10vad4ydr6dIMwr9T0eMBYVvhHCV2f11PxswgCSczo-o";
+const SHEET_GID = "";          // vacío = primera pestaña. Pon el gid si usas otra.
+const AUTO_REFRESH_MIN = 5;    // 0 = desactivado
+
+/* Paleta para colorear los puntos por PROVEEDOR (se asigna por orden de aparición) */
+const PROVIDER_PALETTE = [
+  "#2563eb","#dc2626","#059669","#d97706","#7c3aed",
+  "#db2777","#0891b2","#65a30d","#ea580c","#4f46e5",
+  "#0d9488","#be123c","#7c2d12","#1d4ed8","#9333ea"
+];
+
+/* ============================================================
+   2) DETECCIÓN DE COLUMNAS  (por nombre, tolerante a acentos/orden)
+   ============================================================ */
+const norm = s => (s||"").toString().toLowerCase()
+  .normalize("NFD").replace(/[\u0300-\u036f]/g,"")  // quita acentos
+  .replace(/\s+/g," ").trim();
+
+// Cada campo: clave lógica + función que reconoce el encabezado
+const FIELD_MATCHERS = {
+  proveedor:   h => h.includes("proveedor"),
+  codigo:      h => h==="codigo" || h.includes("codigo"),
+  nombre:      h => h==="nombre",
+  contrato:    h => h.includes("contrato"),
+  zona:        h => h.includes("zona"),
+  estatus:     h => h.includes("estatus") || h.includes("estado"),
+  h24:         h => h.includes("24"),
+  inyeccion:   h => h.includes("inyect"),
+  controlados: h => h.includes("controlad"),
+  biologicos:  h => h.includes("biolog"),
+  direccion:   h => h.includes("direccion"),
+  municipio:   h => h.includes("municipio"),
+  departamento:h => h.includes("departamento"),
+  distrito:    h => h.includes("distrito"),
+  telefono:    h => h.includes("telefon") || h==="tel",
+  lat:         h => h.includes("latitud") || h==="lat",
+  lon:         h => h.includes("longitud") || h==="lon" || h.includes("longitu"),
+  horarioLV:   h => h.includes("horario") && (h.includes("l-v")||h.includes("lv")||h.includes("lunes")),
+  horarioSab:  h => h.includes("horario") && h.includes("sab"),
+  horarioDom:  h => h.includes("horario") && h.includes("domingo"),
+};
+
+/* ============================================================
+   3) CARGA DE DATOS  —  cascada gviz: JSON → CSV → JSONP
+   ============================================================ */
+const gvizBase = (out) =>
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:${out}` +
+  (SHEET_GID ? `&gid=${SHEET_GID}` : "") + `&_=${Date.now()}`;
+
+async function loadViaJSON(){
+  const res = await fetch(gvizBase("json"), {cache:"no-store"});
+  if(!res.ok) throw new Error("JSON http "+res.status);
+  const txt = await res.text();
+  const obj = JSON.parse(txt.substring(txt.indexOf("{"), txt.lastIndexOf("}")+1));
+  return parseGviz(obj.table);
+}
+async function loadViaCSV(){
+  const res = await fetch(gvizBase("csv"), {cache:"no-store"});
+  if(!res.ok) throw new Error("CSV http "+res.status);
+  return parseRows(parseCSV(await res.text()));
+}
+function loadViaJSONP(){
+  return new Promise((resolve,reject)=>{
+    const cb = "__gviz_"+Date.now();
+    const url = gvizBase("json") + `&tqx=out:json:responseHandler:${cb}`;
+    const s = document.createElement("script");
+    const to = setTimeout(()=>{cleanup();reject(new Error("JSONP timeout"));},15000);
+    function cleanup(){clearTimeout(to);delete window[cb];s.remove();}
+    window[cb] = (resp)=>{ try{ const r=parseGviz(resp.table); cleanup(); resolve(r);}catch(e){cleanup();reject(e);} };
+    s.onerror = ()=>{cleanup();reject(new Error("JSONP error"));};
+    s.src = url; document.head.appendChild(s);
+  });
+}
+
+async function loadData(){
+  const methods = [["JSON",loadViaJSON],["CSV",loadViaCSV],["JSONP",loadViaJSONP]];
+  let lastErr;
+  for(const [name,fn] of methods){
+    try{ const rows = await fn(); if(rows && rows.length) return {rows, via:name}; }
+    catch(e){ lastErr = e; console.warn("Método "+name+" falló:", e.message); }
+  }
+  throw lastErr || new Error("Sin datos");
+}
+
+/* --- parsers --- */
+function parseGviz(table){
+  let headers = (table.cols||[]).map(c => c.label || "");
+  let dataRows = table.rows||[];
+  // Si los encabezados vienen vacíos, usar la primera fila como cabecera
+  if(headers.every(h=>!h) && dataRows.length){
+    headers = dataRows[0].c.map(c => c ? (c.f ?? c.v ?? "") : "");
+    dataRows = dataRows.slice(1);
+  }
+  const matrix = dataRows.map(r => (r.c||[]).map(c => {
+    if(!c) return "";
+    return (c.v !== null && c.v !== undefined) ? c.v : (c.f ?? "");
+  }));
+  return buildObjects(headers, matrix);
+}
+function parseRows(arr){
+  if(!arr.length) return [];
+  return buildObjects(arr[0], arr.slice(1));
+}
+// CSV → matriz (maneja comillas, comas y saltos de línea internos)
+function parseCSV(text){
+  const rows=[]; let row=[], cell="", q=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(q){
+      if(ch==='"'){ if(text[i+1]==='"'){cell+='"';i++;} else q=false; }
+      else cell+=ch;
+    }else{
+      if(ch==='"') q=true;
+      else if(ch===',') {row.push(cell);cell="";}
+      else if(ch==='\n'){row.push(cell);rows.push(row);row=[];cell="";}
+      else if(ch==='\r'){/*skip*/}
+      else cell+=ch;
+    }
+  }
+  if(cell.length||row.length){row.push(cell);rows.push(row);}
+  return rows.filter(r => r.some(c => (c||"").trim()!==""));
+}
+
+// Construye objetos: { _raw:[{label,value}], proveedor, estatus, lat, lon, ... }
+function buildObjects(headers, matrix){
+  const hNorm = headers.map(norm);
+  const colIndex = {};
+  for(const key in FIELD_MATCHERS){
+    const idx = hNorm.findIndex(FIELD_MATCHERS[key]);
+    if(idx !== -1 && colIndex[key] === undefined) colIndex[key] = idx;
+  }
+  const out = [];
+  for(const r of matrix){
+    const cellTxt = i => (i===undefined||r[i]===undefined||r[i]===null) ? "" : String(r[i]).trim();
+    const o = {};
+    o._raw = headers.map((label,i)=>({label:label||("Columna "+(i+1)), value:cellTxt(i)}));
+    for(const key in colIndex) o[key] = cellTxt(colIndex[key]);
+    o.lat = parseCoord(o.lat);
+    o.lon = parseCoord(o.lon);
+    o.proveedor = (o.proveedor||"—").trim() || "—";
+    o.estatus   = (o.estatus||"").toUpperCase().trim();
+    o.nombre    = o.nombre || o.codigo || "(Sin nombre)";
+    // Descarta filas totalmente vacías
+    if(o._raw.some(c=>c.value)) out.push(o);
+  }
+  return out;
+}
+function parseCoord(v){
+  if(v===null||v===undefined) return NaN;
+  const n = parseFloat(String(v).replace(/[^0-9.\-]/g,""));
+  return isNaN(n) ? NaN : n;
+}
+// Validez geográfica para El Salvador
+const inSV = (la,lo) => !isNaN(la)&&!isNaN(lo) && la>=12.5&&la<=14.7 && lo>=-90.3&&lo<=-87.4;
+
+/* ============================================================
+   4) ESTADO + RENDER
+   ============================================================ */
+let ALL = [];                 // todas las farmacias
+let PROV_COLORS = {};         // proveedor -> color
+let map, markersLayer;
+const markerById = new Map();
+const state = { search:"", depto:"", prov:"", estatus:"", selected:null, hiddenProv:new Set() };
+
+function assignColors(){
+  PROV_COLORS = {};
+  const provs = [...new Set(ALL.map(p=>p.proveedor))].sort();
+  provs.forEach((p,i)=> PROV_COLORS[p] = PROVIDER_PALETTE[i % PROVIDER_PALETTE.length]);
+}
+const colorOf = p => PROV_COLORS[p.proveedor] || "#64748b";
+const isActive = p => p.estatus.startsWith("ACTIV");
+
+// Aplica filtros (search, depto, prov, estatus, leyenda) → arreglo visible
+function filtered(){
+  const q = norm(state.search);
+  return ALL.filter(p=>{
+    if(state.depto && p.departamento!==state.depto) return false;
+    if(state.prov  && p.proveedor!==state.prov) return false;
+    if(state.estatus){
+      if(state.estatus==="ACTIVO"   && !isActive(p)) return false;
+      if(state.estatus==="INACTIVO" &&  isActive(p)) return false;
+    }
+    if(state.hiddenProv.has(p.proveedor)) return false;
+    if(q){
+      const hay = norm(p.nombre+" "+p.codigo+" "+p.municipio+" "+p.departamento+" "+p.direccion);
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+/* ---- Tarjetas de resumen (sobre depto+prov+search, NO sobre estatus) ---- */
+function baseForCards(){
+  const q = norm(state.search);
+  return ALL.filter(p=>{
+    if(state.depto && p.departamento!==state.depto) return false;
+    if(state.prov  && p.proveedor!==state.prov) return false;
+    if(state.hiddenProv.has(p.proveedor)) return false;
+    if(q){
+      const hay = norm(p.nombre+" "+p.codigo+" "+p.municipio+" "+p.departamento+" "+p.direccion);
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+function renderCards(){
+  const base = baseForCards();
+  const total = base.length;
+  const act = base.filter(isActive).length;
+  const ina = total - act;
+  const pct = n => total? Math.round(n/total*100)+"%" : "0%";
+  const C = document.getElementById("cards");
+  C.innerHTML = "";
+  const defs = [
+    {key:"",        cls:"",          lbl:"Total farmacias", val:total, sub:"En la vista actual", filter:false},
+    {key:"ACTIVO",  cls:"c-activo",  lbl:"Activas",   val:act, sub:pct(act)+" del total", filter:true},
+    {key:"INACTIVO",cls:"c-inactivo",lbl:"Inactivas", val:ina, sub:pct(ina)+" del total", filter:true},
+  ];
+  for(const d of defs){
+    const el = document.createElement("div");
+    el.className = "card "+d.cls + (d.filter?" is-filter":"") + (state.estatus===d.key && d.key?" sel":"");
+    el.innerHTML = `<div class="accent-bar"></div>
+      <div class="lbl">${d.lbl}</div>
+      <div class="val">${d.val}</div>
+      <div class="pct">${d.sub}</div>`;
+    if(d.filter){
+      el.onclick = ()=>{ state.estatus = (state.estatus===d.key)? "" : d.key; closeDetail(); renderAll(); };
+    }else{
+      el.onclick = ()=>{ state.estatus=""; closeDetail(); renderAll(); };
+    }
+    C.appendChild(el);
+  }
+}
+
+/* ---- Listado lateral ---- */
+function renderList(rows){
+  const L = document.getElementById("list");
+  document.getElementById("listCount").textContent =
+    `${rows.length} ${rows.length===1?"farmacia":"farmacias"}`;
+  document.getElementById("listHint").textContent = activeFilterLabel();
+  if(!rows.length){
+    L.innerHTML = `<div class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <div>No hay farmacias que coincidan con los filtros.</div></div>`;
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  for(const p of rows){
+    const el = document.createElement("div");
+    el.className = "list-item" + (state.selected===p?" sel":"");
+    const stCls = isActive(p)? "st-activo":"st-inactivo";
+    const stTxt = p.estatus || "—";
+    el.innerHTML = `
+      <span class="li-pin" style="background:${colorOf(p)}"></span>
+      <div class="li-body">
+        <div class="li-name">${esc(p.nombre)}</div>
+        <div class="li-sub">${esc(p.municipio||"—")} · ${esc(p.departamento||"—")}</div>
+        <div class="li-tags">
+          <span class="tag prov" style="background:${colorOf(p)}">${esc(p.proveedor)}</span>
+          <span class="tag ${stCls}">${esc(stTxt)}</span>
+        </div>
+      </div>`;
+    el.onclick = ()=> selectPharmacy(p, true);
+    frag.appendChild(el);
+  }
+  L.innerHTML = ""; L.appendChild(frag);
+}
+
+/* ---- Mapa ---- */
+function renderMap(rows){
+  markersLayer.clearLayers();
+  markerById.clear();
+  const pts = [];
+  for(const p of rows){
+    if(!inSV(p.lat,p.lon)) continue;
+    const m = L.circleMarker([p.lat,p.lon],{
+      radius:7, color:"#fff", weight:2, fillColor:colorOf(p), fillOpacity:.92
+    });
+    m.bindPopup(popupHTML(p));
+    m.on("click", ()=> selectPharmacy(p, false));
+    m.addTo(markersLayer);
+    markerById.set(p, m);
+    pts.push([p.lat,p.lon]);
+  }
+  const withCoords = pts.length;
+  const noCoords = rows.length - withCoords;
+  document.getElementById("mapCount").textContent =
+    `${withCoords} en el mapa` + (noCoords? ` · ${noCoords} sin coordenadas` : "");
+  if(pts.length && !state.selected){
+    map.fitBounds(pts, {padding:[40,40], maxZoom:13});
+  }
+}
+function popupHTML(p){
+  return `<div>
+    <div class="pop-name">${esc(p.nombre)}</div>
+    <div class="pop-sub">${esc(p.proveedor)} · ${esc(p.municipio||"—")}</div>
+    <div class="pop-sub" style="margin-top:2px">${isActive(p)?"Activa":"Inactiva"}</div>
+    <span class="pop-link" onclick="window.__openDetail&&window.__openDetail()">Ver ficha completa →</span>
+  </div>`;
+}
+
+/* ---- Selección + ficha ---- */
+function selectPharmacy(p, fromList){
+  state.selected = p;
+  const m = markerById.get(p);
+  if(inSV(p.lat,p.lon)){
+    map.setView([p.lat,p.lon], Math.max(map.getZoom(),14), {animate:true});
+    if(m) m.openPopup();
+  }
+  window.__openDetail = ()=> openDetail(p);
+  if(fromList) openDetail(p);
+  // resalta en lista
+  renderList(filtered());
+}
+function openDetail(p){
+  const B = document.getElementById("detailBody");
+  const yn = v => /^s/i.test(v) ? "yes":"no";
+  const svc = (label,v)=>`<div class="svc ${yn(v)}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      ${/^s/i.test(v)?'<path d="M20 6 9 17l-5-5"/>':'<path d="M18 6 6 18M6 6l12 12"/>'}</svg>${label}</div>`;
+
+  const tel = (p.telefono||"").trim();
+  const telDigits = tel.replace(/[^0-9+]/g,"");
+  const telHtml = tel
+    ? `<a href="tel:${esc(telDigits)}">${esc(tel)}</a>`
+    : "—";
+  const coords = inSV(p.lat,p.lon)
+    ? `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`
+    : "Sin coordenadas válidas";
+  const mapsLink = inSV(p.lat,p.lon)
+    ? ` · <a href="https://www.google.com/maps?q=${p.lat},${p.lon}" target="_blank" rel="noopener">Ver en Google Maps</a>` : "";
+
+  // Campos principales en grilla
+  const rowsHtml = [
+    ["Dirección", p.direccion],
+    ["Municipio", p.municipio],
+    ["Departamento", p.departamento],
+    ["Distrito", p.distrito],
+    ["Zona / Cercanía", p.zona],
+    ["Tipo de contrato", p.contrato],
+    ["Teléfono", telHtml, true],
+    ["Coordenadas", esc(coords)+mapsLink, true],
+  ].map(([k,v,raw])=>{
+    const val = raw ? v : esc(v);
+    const muted = (!v || (typeof v==="string" && !v.replace(/—/g,"").trim())) ? " muted":"";
+    return `<div class="frow${muted}"><dt>${k}</dt><dd>${val||"—"}</dd></div>`;
+  }).join("");
+
+  B.innerHTML = `
+    <div class="fh">
+      <div class="prov-line"><span class="pin" style="background:${colorOf(p)}"></span><span>${esc(p.proveedor)}</span></div>
+      <h2>${esc(p.nombre)}</h2>
+      <div class="code">Código: ${esc(p.codigo||"—")}</div>
+      <div class="status-row">
+        <span class="pill ${isActive(p)?'activo':'inactivo'}">${esc(p.estatus||'—')}</span>
+        ${/^s/i.test(p.h24||"")?'<span class="pill h24">Abierta 24 h</span>':''}
+      </div>
+    </div>
+
+    <div class="services">
+      ${svc("Inyectología", p.inyeccion)}
+      ${svc("Med. controlados", p.controlados)}
+      ${svc("Med. biológicos", p.biologicos)}
+    </div>
+
+    <dl class="field-grid">${rowsHtml}</dl>
+
+    <div class="hours">
+      <h3>Horarios de atención</h3>
+      <table>
+        <tr><td>Lunes a viernes</td><td>${esc(p.horarioLV||"—")}</td></tr>
+        <tr><td>Sábado</td><td>${esc(p.horarioSab||"—")}</td></tr>
+        <tr><td>Domingo</td><td>${esc(p.horarioDom||"—")}</td></tr>
+      </table>
+    </div>`;
+  document.getElementById("detail").classList.add("open");
+}
+function closeDetail(){
+  document.getElementById("detail").classList.remove("open");
+  state.selected = null;
+}
+
+/* ---- Leyenda ---- */
+function renderLegend(){
+  const box = document.getElementById("legend");
+  const rows = document.getElementById("legendRows");
+  const provs = Object.keys(PROV_COLORS);
+  if(!provs.length){ box.style.display="none"; return; }
+  box.style.display="block";
+  rows.innerHTML = "";
+  for(const prov of provs){
+    const off = state.hiddenProv.has(prov);
+    const r = document.createElement("div");
+    r.className = "row"+(off?" off":"");
+    r.innerHTML = `<span class="sw" style="background:${PROV_COLORS[prov]}"></span><span>${esc(prov)}</span>`;
+    r.title = "Mostrar/ocultar "+prov;
+    r.onclick = ()=>{
+      if(state.hiddenProv.has(prov)) state.hiddenProv.delete(prov);
+      else state.hiddenProv.add(prov);
+      closeDetail(); renderAll();
+    };
+    rows.appendChild(r);
+  }
+}
+
+/* ---- Filtros (selects) ---- */
+function populateFilters(){
+  const deptos = [...new Set(ALL.map(p=>p.departamento).filter(Boolean))].sort();
+  const provs  = [...new Set(ALL.map(p=>p.proveedor).filter(Boolean))].sort();
+  const fill = (sel,vals)=>{
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">Todos</option>` +
+      vals.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("");
+    sel.value = cur;
+  };
+  fill(document.getElementById("fDepto"), deptos);
+  fill(document.getElementById("fProv"),  provs);
+}
+function activeFilterLabel(){
+  const parts=[];
+  if(state.estatus) parts.push(state.estatus==="ACTIVO"?"Activas":"Inactivas");
+  if(state.depto) parts.push(state.depto);
+  if(state.prov) parts.push(state.prov);
+  return parts.join(" · ");
+}
+
+/* ---- Render maestro ---- */
+function renderAll(){
+  const rows = filtered();
+  renderCards();
+  renderList(rows);
+  renderMap(rows);
+  renderLegend();
+}
+
+/* ---- util ---- */
+function esc(s){return (s==null?"":String(s)).replace(/[&<>"']/g,c=>(
+  {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+
+/* ============================================================
+   5) INICIALIZACIÓN
+   ============================================================ */
+function initMap(){
+  map = L.map("map",{zoomControl:true, attributionControl:true})
+        .setView([13.7942,-88.8965], 8);  // centro aprox. El Salvador
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",{
+    maxZoom:19, subdomains:"abcd",
+    attribution:'&copy; OpenStreetMap, &copy; CARTO'
+  }).addTo(map);
+  markersLayer = L.layerGroup().addTo(map);
+}
+
+function setSync(stateName, text){
+  const el = document.getElementById("sync");
+  el.className = "sync "+stateName;
+  document.getElementById("syncText").textContent = text;
+}
+function showOverlay(html){
+  const ov = document.getElementById("overlay");
+  ov.style.display="flex"; ov.querySelector(".box").innerHTML = html;
+}
+function hideOverlay(){ document.getElementById("overlay").style.display="none"; }
+
+async function refresh(){
+  const btn = document.getElementById("refresh");
+  btn.classList.add("spin");
+  setSync("load","Actualizando…");
+  try{
+    const {rows, via} = await loadData();
+    ALL = rows;
+    assignColors();
+    populateFilters();
+    renderAll();
+    hideOverlay();
+    const t = new Date().toLocaleTimeString("es-SV",{hour:"2-digit",minute:"2-digit"});
+    setSync("ok", `Actualizado ${t} · ${ALL.length} registros`);
+  }catch(e){
+    console.error(e);
+    setSync("err","Error al cargar");
+    showOverlay(`
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.86 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.86a2 2 0 0 0-3.4 0z"/></svg>
+      <h3>No se pudo leer la hoja</h3>
+      <p>Revisa que el Google Sheet esté compartido como <code>Cualquier persona con el enlace</code>.
+      Detalle técnico: ${esc(e.message||e)}.</p>`);
+  }finally{
+    btn.classList.remove("spin");
+  }
+}
+
+function wireEvents(){
+  let t;
+  document.getElementById("search").addEventListener("input", e=>{
+    clearTimeout(t); state.search = e.target.value;
+    t = setTimeout(()=>{ closeDetail(); renderAll(); }, 180);
+  });
+  document.getElementById("fDepto").addEventListener("change", e=>{ state.depto=e.target.value; closeDetail(); renderAll(); });
+  document.getElementById("fProv").addEventListener("change",  e=>{ state.prov =e.target.value; closeDetail(); renderAll(); });
+  document.getElementById("clearFilters").addEventListener("click", ()=>{
+    state.search=state.depto=state.prov=state.estatus=""; state.hiddenProv.clear();
+    document.getElementById("search").value="";
+    document.getElementById("fDepto").value=""; document.getElementById("fProv").value="";
+    closeDetail(); renderAll();
+  });
+  document.getElementById("back").addEventListener("click", closeDetail);
+  document.getElementById("refresh").addEventListener("click", refresh);
+}
+
+window.addEventListener("DOMContentLoaded", ()=>{
+  initMap();
+  wireEvents();
+  refresh();
+  if(AUTO_REFRESH_MIN>0) setInterval(refresh, AUTO_REFRESH_MIN*60*1000);
+});
+</script>
+</body>
+</html>
