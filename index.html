@@ -93,7 +93,7 @@
   aside.sidebar{
     width:380px;flex:0 0 380px;background:var(--panel);
     border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0;
-    position:relative;
+    position:relative;overflow:hidden;
   }
   .search{padding:14px 16px 12px;border-bottom:1px solid var(--line-soft)}
   .search .field{position:relative}
@@ -133,17 +133,21 @@
 
   /* ---------- Ficha (detalle) ---------- */
   .detail{
-    position:absolute;inset:0;background:var(--panel);display:flex;flex-direction:column;
-    transform:translateX(100%);transition:transform .26s cubic-bezier(.4,0,.2,1);z-index:5;
+    position:absolute;top:14px;right:14px;bottom:14px;width:344px;max-width:calc(100% - 28px);
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden;
+    box-shadow:0 12px 44px rgba(15,23,42,.20);display:flex;flex-direction:column;z-index:600;
+    transform:translateX(calc(100% + 24px));opacity:0;visibility:hidden;
+    transition:transform .28s cubic-bezier(.4,0,.2,1),opacity .28s,visibility 0s linear .28s;
   }
-  .detail.open{transform:translateX(0)}
-  .detail-head{padding:13px 16px;border-bottom:1px solid var(--line);
-    display:flex;align-items:center;gap:10px}
-  .back{appearance:none;border:1px solid var(--line);background:#fff;border-radius:9px;
-    padding:7px 11px;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-soft);
-    cursor:pointer;display:flex;align-items:center;gap:6px}
+  .detail.open{transform:translateX(0);opacity:1;visibility:visible;
+    transition:transform .28s cubic-bezier(.4,0,.2,1),opacity .28s,visibility 0s linear 0s}
+  .detail-head{padding:12px 14px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .detail-title{font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--ink-mute)}
+  .back{appearance:none;border:1px solid var(--line);background:#fff;border-radius:8px;
+    width:30px;height:30px;display:grid;place-items:center;cursor:pointer;color:var(--ink-soft);flex:0 0 auto}
   .back:hover{background:#f6f9fb;color:var(--ink)}
-  .back svg{width:14px;height:14px}
+  .back svg{width:16px;height:16px}
   .detail-body{flex:1 1 auto;overflow-y:auto;padding:18px}
 
   .fh{margin-bottom:16px}
@@ -271,6 +275,7 @@
     aside.sidebar{width:auto;flex:none;max-height:48vh;border-right:none;border-bottom:1px solid var(--line)}
     .map-wrap{min-height:60vh}
     main.main{min-height:70vh}
+    .detail{left:14px;right:14px;width:auto;max-width:none}
   }
 </style>
 </head>
@@ -320,17 +325,6 @@
         <span id="listHint"></span>
       </div>
       <div class="list" id="list"></div>
-
-      <!-- Ficha de detalle -->
-      <div class="detail" id="detail">
-        <div class="detail-head">
-          <button class="back" id="back">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            Volver al listado
-          </button>
-        </div>
-        <div class="detail-body" id="detailBody"></div>
-      </div>
     </aside>
 
     <!-- ============ MAIN ============ -->
@@ -357,6 +351,17 @@
       <div class="map-wrap">
         <div id="map"></div>
         <div class="map-count" id="mapCount">—</div>
+
+        <!-- Ficha de detalle flotante sobre el mapa -->
+        <div class="detail" id="detail">
+          <div class="detail-head">
+            <span class="detail-title">Ficha de farmacia</span>
+            <button class="back" id="back" title="Cerrar ficha" aria-label="Cerrar ficha">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="detail-body" id="detailBody"></div>
+        </div>
         <div class="legend" id="legend" style="display:none">
           <h4>Proveedor</h4>
           <div id="legendRows"></div>
@@ -423,37 +428,41 @@ const FIELD_MATCHERS = {
 /* ============================================================
    3) CARGA DE DATOS  —  cascada gviz: JSON → CSV → JSONP
    ============================================================ */
-const gvizBase = (out) =>
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:${out}` +
+// Construye la URL gviz recibiendo el valor COMPLETO de tqx (sin duplicarlo)
+const gvizUrl = (tqx) =>
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=${tqx}` +
   (SHEET_GID ? `&gid=${SHEET_GID}` : "") + `&_=${Date.now()}`;
 
+// JSONP por <script>: el método que realmente funciona cross-origin con Google Sheets
+function loadViaJSONP(){
+  return new Promise((resolve,reject)=>{
+    const cb = "gvizcb_" + Math.random().toString(36).slice(2);
+    const url = gvizUrl(`out:json:responseHandler:${cb}`);
+    const s = document.createElement("script");
+    const to = setTimeout(()=>{cleanup();reject(new Error("JSONP timeout"));}, 20000);
+    function cleanup(){clearTimeout(to); try{delete window[cb];}catch(e){window[cb]=undefined;} s.remove();}
+    window[cb] = (resp)=>{ try{ const r=parseGviz(resp.table); cleanup(); resolve(r);}catch(e){cleanup();reject(e);} };
+    s.onerror = ()=>{cleanup();reject(new Error("JSONP error de red"));};
+    s.src = url; document.head.appendChild(s);
+  });
+}
+// Respaldos por fetch (suelen fallar por CORS, pero se intentan por si el entorno lo permite)
 async function loadViaJSON(){
-  const res = await fetch(gvizBase("json"), {cache:"no-store"});
+  const res = await fetch(gvizUrl("out:json"), {cache:"no-store"});
   if(!res.ok) throw new Error("JSON http "+res.status);
   const txt = await res.text();
   const obj = JSON.parse(txt.substring(txt.indexOf("{"), txt.lastIndexOf("}")+1));
   return parseGviz(obj.table);
 }
 async function loadViaCSV(){
-  const res = await fetch(gvizBase("csv"), {cache:"no-store"});
+  const res = await fetch(gvizUrl("out:csv"), {cache:"no-store"});
   if(!res.ok) throw new Error("CSV http "+res.status);
   return parseRows(parseCSV(await res.text()));
 }
-function loadViaJSONP(){
-  return new Promise((resolve,reject)=>{
-    const cb = "__gviz_"+Date.now();
-    const url = gvizBase("json") + `&tqx=out:json:responseHandler:${cb}`;
-    const s = document.createElement("script");
-    const to = setTimeout(()=>{cleanup();reject(new Error("JSONP timeout"));},15000);
-    function cleanup(){clearTimeout(to);delete window[cb];s.remove();}
-    window[cb] = (resp)=>{ try{ const r=parseGviz(resp.table); cleanup(); resolve(r);}catch(e){cleanup();reject(e);} };
-    s.onerror = ()=>{cleanup();reject(new Error("JSONP error"));};
-    s.src = url; document.head.appendChild(s);
-  });
-}
 
 async function loadData(){
-  const methods = [["JSON",loadViaJSON],["CSV",loadViaCSV],["JSONP",loadViaJSONP]];
+  // JSONP primero: es el que funciona desde Google Sheets sin chocar con CORS
+  const methods = [["JSONP",loadViaJSONP],["JSON",loadViaJSON],["CSV",loadViaCSV]];
   let lastErr;
   for(const [name,fn] of methods){
     try{ const rows = await fn(); if(rows && rows.length) return {rows, via:name}; }
@@ -540,7 +549,7 @@ let ALL = [];                 // todas las farmacias
 let PROV_COLORS = {};         // proveedor -> color
 let map, markersLayer;
 const markerById = new Map();
-const state = { search:"", depto:"", prov:"", estatus:"", selected:null, hiddenProv:new Set() };
+const state = { search:"", depto:"", prov:"", estatus:"ACTIVO", selected:null, hiddenProv:new Set() };
 
 function assignColors(){
   PROV_COLORS = {};
@@ -640,7 +649,7 @@ function renderList(rows){
           <span class="tag ${stCls}">${esc(stTxt)}</span>
         </div>
       </div>`;
-    el.onclick = ()=> selectPharmacy(p, true);
+    el.onclick = ()=> selectPharmacy(p);
     frag.appendChild(el);
   }
   L.innerHTML = ""; L.appendChild(frag);
@@ -656,8 +665,8 @@ function renderMap(rows){
     const m = L.circleMarker([p.lat,p.lon],{
       radius:7, color:"#fff", weight:2, fillColor:colorOf(p), fillOpacity:.92
     });
-    m.bindPopup(popupHTML(p));
-    m.on("click", ()=> selectPharmacy(p, false));
+    m.bindTooltip(esc(p.nombre), {direction:"top", offset:[0,-4]});
+    m.on("click", ()=> selectPharmacy(p));
     m.addTo(markersLayer);
     markerById.set(p, m);
     pts.push([p.lat,p.lon]);
@@ -670,26 +679,13 @@ function renderMap(rows){
     map.fitBounds(pts, {padding:[40,40], maxZoom:13});
   }
 }
-function popupHTML(p){
-  return `<div>
-    <div class="pop-name">${esc(p.nombre)}</div>
-    <div class="pop-sub">${esc(p.proveedor)} · ${esc(p.municipio||"—")}</div>
-    <div class="pop-sub" style="margin-top:2px">${isActive(p)?"Activa":"Inactiva"}</div>
-    <span class="pop-link" onclick="window.__openDetail&&window.__openDetail()">Ver ficha completa →</span>
-  </div>`;
-}
-
 /* ---- Selección + ficha ---- */
-function selectPharmacy(p, fromList){
+function selectPharmacy(p){
   state.selected = p;
-  const m = markerById.get(p);
   if(inSV(p.lat,p.lon)){
     map.setView([p.lat,p.lon], Math.max(map.getZoom(),14), {animate:true});
-    if(m) m.openPopup();
   }
-  window.__openDetail = ()=> openDetail(p);
-  if(fromList) openDetail(p);
-  // resalta en lista
+  openDetail(p);
   renderList(filtered());
 }
 function openDetail(p){
@@ -754,9 +750,11 @@ function openDetail(p){
       </table>
     </div>`;
   document.getElementById("detail").classList.add("open");
+  document.getElementById("mapCount").style.visibility = "hidden";
 }
 function closeDetail(){
   document.getElementById("detail").classList.remove("open");
+  document.getElementById("mapCount").style.visibility = "visible";
   state.selected = null;
 }
 
@@ -876,7 +874,7 @@ function wireEvents(){
   document.getElementById("fDepto").addEventListener("change", e=>{ state.depto=e.target.value; closeDetail(); renderAll(); });
   document.getElementById("fProv").addEventListener("change",  e=>{ state.prov =e.target.value; closeDetail(); renderAll(); });
   document.getElementById("clearFilters").addEventListener("click", ()=>{
-    state.search=state.depto=state.prov=state.estatus=""; state.hiddenProv.clear();
+    state.search=state.depto=state.prov=""; state.estatus="ACTIVO"; state.hiddenProv.clear();
     document.getElementById("search").value="";
     document.getElementById("fDepto").value=""; document.getElementById("fProv").value="";
     closeDetail(); renderAll();
