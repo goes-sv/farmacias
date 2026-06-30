@@ -75,12 +75,12 @@
   .sync.load .dot{background:#eab308;animation:pulse 1s infinite}
   @keyframes pulse{50%{opacity:.3}}
   .btn-refresh{
-    appearance:none;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);
-    color:#e7eef2;font:inherit;font-size:12.5px;font-weight:600;
-    padding:8px 13px;border-radius:9px;cursor:pointer;display:flex;align-items:center;gap:7px;
+    appearance:none;border:1px solid var(--accent);background:var(--accent);
+    color:#fff;font:inherit;font-size:12.5px;font-weight:600;
+    padding:9px 14px;border-radius:9px;cursor:pointer;display:flex;align-items:center;gap:7px;
     transition:background .15s,border-color .15s;
   }
-  .btn-refresh:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.28)}
+  .btn-refresh:hover{background:var(--accent-d);border-color:var(--accent-d)}
   .btn-refresh:active{transform:translateY(1px)}
   .btn-refresh svg{width:15px;height:15px}
   .btn-refresh.spin svg{animation:spin .8s linear infinite}
@@ -223,7 +223,7 @@
     min-width:180px;cursor:pointer;
   }
   .ctrl select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(15,118,110,.12)}
-  .toolbar .clear{margin-left:auto;align-self:flex-end}
+  .toolbar .actions{margin-left:auto;align-self:flex-end;display:flex;gap:10px;flex-wrap:wrap}
   .clear-btn{appearance:none;border:1px solid var(--line);background:#fff;border-radius:9px;
     padding:9px 13px;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;
     display:flex;align-items:center;gap:6px}
@@ -302,12 +302,6 @@
       <span class="dot"></span>
       <span id="syncText">Cargando datos…</span>
     </div>
-    <button class="btn-refresh" id="refresh" title="Volver a leer la hoja">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5"/>
-      </svg>
-      Actualizar
-    </button>
   </header>
 
   <div class="body">
@@ -340,7 +334,13 @@
           <label for="fProv">Proveedor</label>
           <select id="fProv"><option value="">Todos</option></select>
         </div>
-        <div class="clear">
+        <div class="actions">
+          <button class="btn-refresh" id="refresh" title="Volver a leer la hoja">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5"/>
+            </svg>
+            Actualizar datos
+          </button>
           <button class="clear-btn" id="clearFilters">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
             Limpiar filtros
